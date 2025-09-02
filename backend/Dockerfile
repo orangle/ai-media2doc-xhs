@@ -12,7 +12,6 @@ RUN set -ex && \
     sed -i 's/deb.debian.org/mirrors.cloud.tencent.com/g' /etc/apt/sources.list.d/debian.sources && \
     apt update
 
-# ------------------- Stage 1: Build Stage ------------------------------
 FROM base AS builder
 
 WORKDIR /
@@ -29,7 +28,6 @@ RUN set -ex && \
     pip install --upgrade pip && \
     pip install -r ./requirements.txt
 
-# ------------------- Stage 2: Final Stage ------------------------------
 FROM base
 
 WORKDIR /app
@@ -39,8 +37,8 @@ ADD ./ ./
 
 ENV MODEL_ID="xxx" \
     LLM_API_KEY="xxx" \
-    LLM_MAX_TOKENS=4096\
     TOS_ACCESS_KEY="xxx" \
+    LLM_MAX_TOKENS=8192 \
     TOS_SECRET_KEY="xxx" \
     TOS_ENDPOINT="xxx" \
     TOS_REGION="xxx" \
@@ -50,7 +48,6 @@ ENV MODEL_ID="xxx" \
     AUC_CLUSTER_ID="xxx" \
     LLM_BASE_URL="https://ark.cn-beijing.volces.com/api/v3"
 
-
 EXPOSE 8080
 
-CMD ["python", "/app/main.py"]
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8080"]
