@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+streamlit
+ffmpeg-python
+openai-whisper
+requests
+
+scenedetect
+opencv-python-headless
