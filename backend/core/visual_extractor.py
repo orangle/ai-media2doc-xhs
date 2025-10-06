@@ -68,6 +68,74 @@ def _parse_content_to_dict(content) -> Dict:
         return {"description": text}
 
 
+def light_rank(image_paths: List[str]) -> List[Dict]:
+    """对候选帧进行轻量问答筛选"""
+
+    if not image_paths:
+        return []
+
+    contents: List[Dict] = [
+        {
+            "type": "input_text",
+            "text": (
+                "You will review candidate frames from a travel video. For each frame, respond with a JSON object "
+                "containing keys: path, has_landmark, has_readable_text, representativeness, brief. "
+                "Return a JSON array in the same order as the images. "
+                "Only judge based on visible content. If uncertain, use null. "
+                "Mark has_landmark true only if a distinctive landmark/attraction is clearly shown. "
+                "Mark has_readable_text true only if signage/boards/overlays with readable Chinese words or numbers are present. "
+                "representativeness should be a number between 0 and 1 reflecting how well the frame summarizes the scene. "
+                "brief should be a concise Chinese phrase mentioning key objects or actions and extract explicit keywords such as ¥, 元, 门票, 开放时间, 站, 出口, 博物馆 when visible. "
+                "Do not guess the city or location unless text explicitly states it."
+            ),
+        }
+    ]
+
+    for idx, image_path in enumerate(image_paths, start=1):
+        contents.append({"type": "input_text", "text": f"Frame {idx}: {Path(image_path).name}"})
+        contents.append({"type": "input_image", "image_url": _read_image_as_data_url(image_path)})
+
+    messages = [
+        {
+            "role": "system",
+            "content": "You are a meticulous assistant helping to rank candidate frames. Only answer in strict JSON.",
+        },
+        {
+            "role": "user",
+            "content": contents,
+        },
+    ]
+
+    content = _call_iflow(messages)
+
+    if isinstance(content, list):
+        text = "".join(part.get("text", "") for part in content)
+    else:
+        text = str(content)
+
+    text = text.strip()
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError:
+        LOGGER.error("Failed to parse light_rank JSON response: %s", text)
+        parsed = []
+
+    results: List[Dict] = []
+    for idx, path in enumerate(image_paths):
+        data = parsed[idx] if idx < len(parsed) and isinstance(parsed[idx], dict) else {}
+        results.append(
+            {
+                "path": path,
+                "has_landmark": data.get("has_landmark"),
+                "has_readable_text": data.get("has_readable_text"),
+                "representativeness": data.get("representativeness"),
+                "brief": data.get("brief", ""),
+            }
+        )
+
+    return results
+
+
 def analyze_frame(image_path: str) -> Dict:
     """调用 iFlow Qwen3-VL-Plus 模型，识别图片中的地点、活动、物体、情绪、可读文字，返回 JSON 字典"""
     image_data_url = _read_image_as_data_url(image_path)

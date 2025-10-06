@@ -31,11 +31,20 @@ def _save_uploaded_file(uploaded_file) -> Path:
 def _run_pipeline(video_path: Path) -> Optional[dict]:
     try:
         asr_result = asr.transcribe(str(video_path))
-        frames = video_utils.extract_keyframes(str(video_path), fps=1)
-        visual_result = visual_extractor.extract_visual_facts(frames)
+        scenes = video_utils.detect_scenes(str(video_path))
+        frames_info = video_utils.extract_frames(str(video_path), fps=1)
+        keyframe_selection = video_utils.select_keyframes(scenes, frames_info, k=9, budget=15)
+        chosen_frames = keyframe_selection.get("chosen", [])
+        chosen_paths = [frame["path"] for frame in chosen_frames]
+        visual_result = visual_extractor.extract_visual_facts(chosen_paths)
         facts = fact_extractor.extract_facts(asr_result, visual_result)
         post = post_writer.generate_post(facts)
-        return {"facts": facts, "post": post, "frames": frames}
+        return {
+            "facts": facts,
+            "post": post,
+            "frames": chosen_paths,
+            "keyframe_selection": keyframe_selection,
+        }
     except Exception as exc:  # noqa: BLE001
         LOGGER.exception("Pipeline failed: %s", exc)
         st.error(f"处理失败：{exc}")
@@ -81,11 +90,16 @@ if result:
         st.json(facts, expanded=False)
 
     with st.expander("查看抽帧结果", expanded=False):
-        frames = result.get("frames", [])
+        frames = result.get("keyframe_selection", {}).get("chosen", [])
         if frames:
             cols = st.columns(3)
-            for idx, frame_path in enumerate(frames):
+            for idx, frame in enumerate(frames):
+                frame_path = frame.get("path")
+                caption_parts = [os.path.basename(frame_path or "frame"), f"score {frame.get('final_score', 0):.2f}"]
+                brief = frame.get("vlm", {}).get("brief")
+                if brief:
+                    caption_parts.append(brief)
                 with cols[idx % 3]:
-                    st.image(frame_path, caption=os.path.basename(frame_path))
+                    st.image(frame_path, caption=" | ".join(part for part in caption_parts if part))
         else:
             st.write("未生成帧图像。")
