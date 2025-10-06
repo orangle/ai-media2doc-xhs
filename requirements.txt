@@ -4,6 +4,7 @@ streamlit
 ffmpeg-python
 openai-whisper
 requests
+tenacity
 
 scenedetect
 opencv-python-headless
